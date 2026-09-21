@@ -1,0 +1,50 @@
+name: Publier les listes chronologiques
+
+on:
+  schedule:
+    # Après les bots Montpellier (05:17 UTC) et France (05:47 UTC).
+    - cron: "2 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beach-tennis-lists-daily
+  cancel-in-progress: false
+
+jobs:
+  publish-lists:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt
+
+      - name: Vérifier les nouvelles listes
+        env:
+          DISCORD_WEBHOOK_MONTPELLIER_URL: ${{ secrets.DISCORD_WEBHOOK_MONTPELLIER_URL }}
+          DISCORD_WEBHOOK_FRANCE_URL: ${{ secrets.DISCORD_WEBHOOK_FRANCE_URL }}
+        run: python list_bot.py
+
+      - name: Enregistrer l'état du bot
+        run: |
+          if git diff --quiet -- list_bot_state.json; then
+            echo "Aucune modification à enregistrer."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add list_bot_state.json
+          git commit -m "Mettre à jour la mémoire des listes"
+          git push
